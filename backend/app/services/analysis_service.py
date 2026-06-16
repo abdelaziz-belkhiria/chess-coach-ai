@@ -12,6 +12,7 @@ def get_game_by_id(db: Session, game_id: int):
 
 def list_player_games(db: Session, username: str):
     """Retrieve all imported games for a specific player username."""
+    # Find player with platform support
     player = db.query(models.Player).filter(models.Player.username == username.lower()).first()
     if not player:
         return []
@@ -119,7 +120,9 @@ def analyze_game(db: Session, game_id: int):
             turn=move["turn"],
             move_san=move["move_san"],
             fen_before=move["fen_before"],
-            best_move=move["best_move"],
+            best_move=move.get("best_move_san") or move.get("best_move"), # for backward compat
+            best_move_uci=move.get("best_move_uci"),
+            best_move_san=move.get("best_move_san"),
             evaluation_before=move["evaluation_before"],
             evaluation_after=move["evaluation_after"],
             points_lost=move["points_lost"],
@@ -145,7 +148,111 @@ def get_game_analysis(db: Session, game_id: int):
         models.MoveAnalysis.game_id == game_id
     ).order_by(
         models.MoveAnalysis.move_number,
-        models.MoveAnalysis.turn.desc() # 'white' comes after 'black' alphabetically, but we want white first? 
-                                        # Actually 'white' > 'black' is True. 
-                                        # Let's check: move 1 white, move 1 black.
+        models.MoveAnalysis.turn.desc() # 'white' comes after 'black' alphabetically
     ).all()
+
+def get_game_review(db: Session, game_id: int):
+    """Generate a comprehensive frontend-friendly review for a game."""
+    game = get_game_by_id(db, game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    if not game.analyzed:
+        raise HTTPException(
+            status_code=400, 
+            detail="Game must be analyzed before review. Call POST /games/{id}/analyze first."
+        )
+
+    # Get move analysis
+    moves = get_game_analysis(db, game_id)
+    
+    # Initialize summary statistics
+    classifications = ["Brilliant", "Great", "Best", "Excellent", "Good", "Book", "Inaccuracy", "Mistake", "Miss", "Blunder"]
+    
+    stats = {
+        "white": {"username": game.white_username, "points_lost": [], "counts": {c: 0 for c in classifications}},
+        "black": {"username": game.black_username, "points_lost": [], "counts": {c: 0 for c in classifications}}
+    }
+
+    processed_moves = []
+    eval_graph = []
+    key_moments = []
+    
+    for i, m in enumerate(moves):
+        side = m.turn
+        stats[side]["points_lost"].append(m.points_lost)
+        if m.classification in stats[side]["counts"]:
+            stats[side]["counts"][m.classification] += 1
+        
+        # Build processed move list
+        processed_moves.append({
+            "move_number": m.move_number,
+            "turn": m.turn,
+            "move_san": m.move_san,
+            "classification": m.classification,
+            "points_lost": m.points_lost,
+            "evaluation_before": m.evaluation_before,
+            "evaluation_after": m.evaluation_after,
+            "best_move_uci": m.best_move_uci,
+            "best_move_san": m.best_move_san,
+            "fen_before": m.fen_before
+        })
+
+        # Eval graph (ply is the index + 1)
+        eval_graph.append({
+            "ply": i + 1,
+            "move_number": m.move_number,
+            "turn": m.turn,
+            "evaluation": m.evaluation_after
+        })
+
+    # Accuracy estimates (Temporary approximate formula)
+    # accuracy = max(0, min(100, 100 - average_points_lost * 15))
+    def calc_accuracy(pts_list):
+        if not pts_list: return 0.0
+        avg_loss = sum(pts_list) / len(pts_list)
+        return round(max(0, min(100, 100 - avg_loss * 15)), 1)
+
+    white_accuracy = calc_accuracy(stats["white"]["points_lost"])
+    black_accuracy = calc_accuracy(stats["black"]["points_lost"])
+
+    # Key moments (top 5 worst moves)
+    # Sort all moves by points lost
+    sorted_by_loss = sorted(moves, key=lambda x: x.points_lost, reverse=True)
+    for m in sorted_by_loss[:5]:
+        key_moments.append({
+            "move_number": m.move_number,
+            "turn": m.turn,
+            "move_san": m.move_san,
+            "classification": m.classification,
+            "points_lost": m.points_lost
+        })
+
+    return {
+        "game": {
+            "id": game.id,
+            "platform": game.player.platform if game.player else "chesscom",
+            "white_username": game.white_username,
+            "black_username": game.black_username,
+            "result": game.result,
+            "time_control": game.time_control,
+            "end_time": game.end_time,
+            "analyzed": game.analyzed
+        },
+        "summary": {
+            "total_moves": len(moves),
+            "white": {
+                "username": game.white_username,
+                "accuracy_estimate": white_accuracy,
+                "counts": stats["white"]["counts"]
+            },
+            "black": {
+                "username": game.black_username,
+                "accuracy_estimate": black_accuracy,
+                "counts": stats["black"]["counts"]
+            }
+        },
+        "moves": processed_moves,
+        "evaluation_graph": eval_graph,
+        "key_moments": key_moments
+    }

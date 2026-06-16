@@ -69,6 +69,18 @@ async def get_game_analysis(game_id: int, db: Session = Depends(database.get_db)
         return []
     return analysis
 
+@app.get("/games/{game_id}/review", response_model=game_schema.GameReviewResponse)
+async def get_game_review(game_id: int, review_as: str = "both", db: Session = Depends(database.get_db)):
+    """Get a comprehensive frontend-friendly review of a game (Accuracy, counts, graph)."""
+    try:
+        result = analysis_service.get_game_review(db, game_id)
+        return result
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error during game review for game {game_id}: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred during game review.")
+
 @app.get("/players/{username}/weaknesses", response_model=game_schema.WeaknessSummaryResponse)
 async def get_player_weaknesses(username: str, db: Session = Depends(database.get_db)):
     """Analyze player's historical games to detect performance weaknesses."""

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -7,10 +7,13 @@ class Player(Base):
     __tablename__ = "players"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, index=True, nullable=False)
+    platform = Column(String, default="chesscom", index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     games = relationship("Game", back_populates="player")
+
+    __table_args__ = (UniqueConstraint('username', 'platform', name='_username_platform_uc'),)
 
 class Game(Base):
     __tablename__ = "games"
@@ -39,7 +42,9 @@ class MoveAnalysis(Base):
     turn = Column(String, nullable=False) # "white" or "black"
     move_san = Column(String, nullable=False)
     fen_before = Column(Text, nullable=False)
-    best_move = Column(String, nullable=True)
+    best_move = Column(String, nullable=True) # Usually UCI
+    best_move_uci = Column(String, nullable=True)
+    best_move_san = Column(String, nullable=True)
     evaluation_before = Column(Float, nullable=True)
     evaluation_after = Column(Float, nullable=True)
     points_lost = Column(Float, nullable=True)

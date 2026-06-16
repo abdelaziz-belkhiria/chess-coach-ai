@@ -120,6 +120,7 @@ def get_player_weaknesses(db: Session, username: str):
             "points_lost": move.points_lost,
             "classification": move.classification,
             "best_move": move.best_move,
+            "best_move_san": move.best_move_san,
             "fen_before": move.fen_before
         })
 
@@ -147,6 +148,7 @@ def get_player_weaknesses(db: Session, username: str):
         "username": username,
         "total_analyzed_games": len(analyzed_games),
         "total_moves_analyzed": total_moves,
+        "total_player_moves_analyzed": total_moves,
         "total_blunders": blunders,
         "total_mistakes": mistakes,
         "total_inaccuracies": inaccuracies,

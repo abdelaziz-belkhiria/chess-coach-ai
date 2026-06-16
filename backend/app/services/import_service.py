@@ -6,11 +6,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_or_create_player(db: Session, username: str):
+def get_or_create_player(db: Session, username: str, platform: str = "chesscom"):
     """Get a player from database or create one if not exists."""
-    db_player = db.query(models.Player).filter(models.Player.username == username.lower()).first()
+    username_lower = username.lower()
+    db_player = db.query(models.Player).filter(
+        models.Player.username == username_lower,
+        models.Player.platform == platform
+    ).first()
+    
     if not db_player:
-        db_player = models.Player(username=username.lower())
+        db_player = models.Player(username=username_lower, platform=platform)
         db.add(db_player)
         db.commit()
         db.refresh(db_player)
