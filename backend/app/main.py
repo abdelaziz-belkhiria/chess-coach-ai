@@ -5,7 +5,7 @@ import logging
 
 from .db import database, models
 from .schemas import game_schema
-from .services import import_service, analysis_service
+from .services import import_service, analysis_service, weakness_service
 from .clients import chesscom_client
 
 # Create database tables
@@ -68,6 +68,18 @@ async def get_game_analysis(game_id: int, db: Session = Depends(database.get_db)
             raise HTTPException(status_code=404, detail=f"Game with ID {game_id} not found")
         return []
     return analysis
+
+@app.get("/players/{username}/weaknesses", response_model=game_schema.WeaknessSummaryResponse)
+async def get_player_weaknesses(username: str, db: Session = Depends(database.get_db)):
+    """Analyze player's historical games to detect performance weaknesses."""
+    try:
+        result = weakness_service.get_player_weaknesses(db, username)
+        return result
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error calculating weaknesses for {username}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to calculate player weaknesses.")
 
 # Legacy/Helper endpoint from previous step (optional to keep, but user asked to keep it or implied it)
 @app.get("/players/{username}/latest-games-raw")
