@@ -1,7 +1,9 @@
-﻿venv/
+venv/
 __pycache__/
 *.pyc
 .env
+backend/.env
+backend/chess_coach.db
 *.db
 engine/
 .vscode/
