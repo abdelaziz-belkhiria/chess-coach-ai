@@ -17,6 +17,69 @@ def list_player_games(db: Session, username: str):
         return []
     return db.query(models.Game).filter(models.Game.player_id == player.id).all()
 
+def analyze_player_games(db: Session, username: str, limit: int = 5):
+    """Analyze multiple unanalyzed games for a specific player."""
+    player = db.query(models.Player).filter(models.Player.username.ilike(username)).first()
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Player {username} not found")
+
+    # Get unanalyzed games
+    unanalyzed_games = db.query(models.Game).filter(
+        models.Game.player_id == player.id,
+        models.Game.analyzed == False
+    ).order_by(models.Game.imported_at.desc()).all()
+
+    if not unanalyzed_games:
+        return {
+            "username": username,
+            "requested_limit": limit,
+            "games_analyzed": 0,
+            "games_remaining": 0,
+            "total_moves_analyzed": 0,
+            "total_blunders": 0,
+            "total_mistakes": 0,
+            "total_inaccuracies": 0,
+            "failed_games": [],
+            "message": "No unanalyzed games remaining."
+        }
+
+    games_to_analyze = unanalyzed_games[:limit]
+    
+    total_moves = 0
+    total_blunders = 0
+    total_mistakes = 0
+    total_inaccuracies = 0
+    failed_games = []
+    analyzed_count = 0
+
+    for game in games_to_analyze:
+        try:
+            result = analyze_game(db, game.id)
+            total_moves += result["moves_analyzed"]
+            total_blunders += result["blunders"]
+            total_mistakes += result["mistakes"]
+            total_inaccuracies += result["inaccuracies"]
+            analyzed_count += 1
+        except Exception as e:
+            logger.error(f"Failed to analyze game {game.id} during batch: {e}")
+            failed_games.append(game.id)
+            continue
+
+    remaining_count = len(unanalyzed_games) - analyzed_count
+
+    return {
+        "username": username,
+        "requested_limit": limit,
+        "games_analyzed": analyzed_count,
+        "games_remaining": max(0, remaining_count),
+        "total_moves_analyzed": total_moves,
+        "total_blunders": total_blunders,
+        "total_mistakes": total_mistakes,
+        "total_inaccuracies": total_inaccuracies,
+        "failed_games": failed_games,
+        "message": f"Successfully analyzed {analyzed_count} games." if analyzed_count > 0 else "Analysis completed with failures."
+    }
+
 def analyze_game(db: Session, game_id: int):
     """Analyze a game with Stockfish and store move evaluations in the DB."""
     game = get_game_by_id(db, game_id)

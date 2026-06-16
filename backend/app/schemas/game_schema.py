@@ -29,7 +29,6 @@ class GameResponse(BaseModel):
     end_time: Optional[datetime] = None
     imported_at: datetime
     analyzed: bool
-    # move_analyses: List[MoveAnalysisResponse] = [] # Optional: include analyses if needed
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -37,7 +36,6 @@ class PlayerResponse(BaseModel):
     id: int
     username: str
     created_at: datetime
-    # games: List[GameResponse] = [] # Optional: include games if needed
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -53,6 +51,18 @@ class AnalyzeGameResponse(BaseModel):
     blunders: int
     mistakes: int
     inaccuracies: int
+
+class AnalyzePlayerGamesResponse(BaseModel):
+    username: str
+    requested_limit: int
+    games_analyzed: int
+    games_remaining: int
+    total_moves_analyzed: int
+    total_blunders: int
+    total_mistakes: int
+    total_inaccuracies: int
+    failed_games: List[int]
+    message: Optional[str] = None
 
 class CriticalMistakeResponse(BaseModel):
     game_id: int
@@ -85,6 +95,8 @@ class WeaknessSummaryResponse(BaseModel):
     average_points_lost: float
     phase_weakness: PhaseWeakness
     color_weakness: ColorWeakness
+    phase_bad_move_rate: dict[str, float]
+    color_bad_move_rate: dict[str, float]
     main_weakness: str
     critical_mistakes: List[CriticalMistakeResponse]
     message: Optional[str] = None

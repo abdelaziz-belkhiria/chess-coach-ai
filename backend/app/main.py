@@ -81,6 +81,18 @@ async def get_player_weaknesses(username: str, db: Session = Depends(database.ge
         logger.error(f"Error calculating weaknesses for {username}: {e}")
         raise HTTPException(status_code=500, detail="Failed to calculate player weaknesses.")
 
+@app.post("/players/{username}/analyze-games", response_model=game_schema.AnalyzePlayerGamesResponse)
+async def analyze_player_games(username: str, limit: int = 5, db: Session = Depends(database.get_db)):
+    """Analyze multiple unanalyzed games for a player (Batch process)."""
+    try:
+        result = analysis_service.analyze_player_games(db, username, limit)
+        return result
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error during batch analysis for {username}: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred during batch analysis.")
+
 # Legacy/Helper endpoint from previous step (optional to keep, but user asked to keep it or implied it)
 @app.get("/players/{username}/latest-games-raw")
 async def get_latest_games_raw(username: str):

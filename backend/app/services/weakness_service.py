@@ -7,15 +7,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 def get_player_weaknesses(db: Session, username: str):
-    """Calculate weakness statistics for a player based on analyzed games."""
+    """Calculate weakness statistics for a player using rates for better accuracy."""
     # 1. Find player
     player = db.query(models.Player).filter(models.Player.username == username.lower()).first()
     if not player:
         raise HTTPException(status_code=404, detail=f"Player {username} not found")
 
     # 2. Get analyzed games for this player
-    # A game is "analyzed" if the analyzed flag is True.
-    # The player must be either the white or black player.
     analyzed_games = db.query(models.Game).filter(
         and_(
             models.Game.player_id == player.id,
@@ -36,17 +34,14 @@ def get_player_weaknesses(db: Session, username: str):
             "average_points_lost": 0.0,
             "phase_weakness": {"opening": 0, "middlegame": 0, "endgame": 0},
             "color_weakness": {"white": 0, "black": 0},
-            "main_weakness": "No clear weakness detected yet.",
+            "phase_bad_move_rate": {"opening": 0, "middlegame": 0, "endgame": 0},
+            "color_bad_move_rate": {"white": 0, "black": 0},
+            "main_weakness": "Not enough analyzed moves yet. Analyze more games first.",
             "critical_mistakes": [],
             "message": "No analyzed games yet. Analyze games first."
         }
 
-    # 3. Get all MoveAnalysis rows for moves made BY this player across all analyzed games
-    # We need to check the Game record to see if the player was White or Black for that move.
-    
-    player_moves = []
-    
-    # Efficiently fetch moves: Join MoveAnalysis with Game
+    # 3. Get all MoveAnalysis rows for moves made BY this player
     query = db.query(models.MoveAnalysis, models.Game).join(
         models.Game, models.MoveAnalysis.game_id == models.Game.id
     ).filter(
@@ -66,23 +61,19 @@ def get_player_weaknesses(db: Session, username: str):
     inaccuracies = 0
     total_points_lost = 0.0
     
-    phase_counts = {"opening": 0, "middlegame": 0, "endgame": 0}
-    color_counts = {"white": 0, "black": 0}
+    # Raw counts of bad moves
+    phase_bad_counts = {"opening": 0, "middlegame": 0, "endgame": 0}
+    color_bad_counts = {"white": 0, "black": 0}
+    
+    # Total move counts per segment (for rates)
+    phase_total_counts = {"opening": 0, "middlegame": 0, "endgame": 0}
+    color_total_counts = {"white": 0, "black": 0}
     
     bad_classifications = ["Blunder", "Mistake", "Inaccuracy"]
     
     for move, game in results:
         total_points_lost += move.points_lost
         
-        is_bad = move.classification in bad_classifications
-        
-        if move.classification == "Blunder":
-            blunders += 1
-        elif move.classification == "Mistake":
-            mistakes += 1
-        elif move.classification == "Inaccuracy":
-            inaccuracies += 1
-            
         # Phase Detection
         if move.move_number <= 10:
             phase = "opening"
@@ -91,14 +82,33 @@ def get_player_weaknesses(db: Session, username: str):
         else:
             phase = "endgame"
             
-        if is_bad:
-            phase_counts[phase] += 1
-            color_counts[move.turn] += 1
+        phase_total_counts[phase] += 1
+        color_total_counts[move.turn] += 1
+        
+        if move.classification == "Blunder":
+            blunders += 1
+        elif move.classification == "Mistake":
+            mistakes += 1
+        elif move.classification == "Inaccuracy":
+            inaccuracies += 1
+            
+        if move.classification in bad_classifications:
+            phase_bad_counts[phase] += 1
+            color_bad_counts[move.turn] += 1
             
     avg_points_lost = total_points_lost / total_moves if total_moves > 0 else 0.0
     
-    # 4. Critical Mistakes (Top 10 by points_lost)
-    # Sort results by points_lost descending
+    # Calculate rates
+    phase_rates = {
+        k: (phase_bad_counts[k] / phase_total_counts[k]) if phase_total_counts[k] > 0 else 0.0 
+        for k in phase_total_counts
+    }
+    color_rates = {
+        k: (color_bad_counts[k] / color_total_counts[k]) if color_total_counts[k] > 0 else 0.0 
+        for k in color_total_counts
+    }
+    
+    # 4. Critical Mistakes
     sorted_moves = sorted(results, key=lambda x: x[0].points_lost, reverse=True)
     critical_mistakes = []
     for move, game in sorted_moves[:10]:
@@ -113,22 +123,25 @@ def get_player_weaknesses(db: Session, username: str):
             "fen_before": move.fen_before
         })
 
-    # 5. Determine Main Weakness
-    main_weakness = "No clear weakness detected yet."
-    
-    # Compare phases
-    max_phase = max(phase_counts, key=phase_counts.get)
-    if phase_counts[max_phase] > 0:
-        main_weakness = f"You lose most points in the {max_phase}."
+    # 5. Determine Main Weakness based on rates
+    if total_moves < 20:
+        main_weakness = "Not enough analyzed moves yet. Analyze more games first."
+    else:
+        # Check if color is the primary issue (significant rate difference)
+        w_rate = color_rates["white"]
+        b_rate = color_rates["black"]
         
-    # Check if color is a significantly bigger factor (e.g. 50% more bad moves on one side)
-    white_bad = color_counts["white"]
-    black_bad = color_counts["black"]
-    
-    if white_bad > black_bad * 1.5 and white_bad > 5:
-        main_weakness = "You make significantly more bad moves as White."
-    elif black_bad > white_bad * 1.5 and black_bad > 5:
-        main_weakness = "You make significantly more bad moves as Black."
+        if b_rate > w_rate * 1.3:
+            main_weakness = "You make bad moves more often as Black."
+        elif w_rate > b_rate * 1.3:
+            main_weakness = "You make bad moves more often as White."
+        else:
+            # Otherwise, use highest phase rate
+            max_phase = max(phase_rates, key=phase_rates.get)
+            if phase_rates[max_phase] > 0:
+                main_weakness = f"Your highest bad move rate is in the {max_phase}."
+            else:
+                main_weakness = "No clear weakness detected yet."
 
     return {
         "username": username,
@@ -138,8 +151,10 @@ def get_player_weaknesses(db: Session, username: str):
         "total_mistakes": mistakes,
         "total_inaccuracies": inaccuracies,
         "average_points_lost": round(avg_points_lost, 3),
-        "phase_weakness": phase_counts,
-        "color_weakness": color_counts,
+        "phase_weakness": phase_bad_counts,
+        "color_weakness": color_bad_counts,
+        "phase_bad_move_rate": {k: round(v, 3) for k, v in phase_rates.items()},
+        "color_bad_move_rate": {k: round(v, 3) for k, v in color_rates.items()},
         "main_weakness": main_weakness,
         "critical_mistakes": critical_mistakes
     }
