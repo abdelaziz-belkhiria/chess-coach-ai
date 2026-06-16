@@ -45,6 +45,30 @@ async def get_game(game_id: int, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=404, detail=f"Game with ID {game_id} not found")
     return game
 
+@app.post("/games/{game_id}/analyze", response_model=game_schema.AnalyzeGameResponse)
+async def analyze_stored_game(game_id: int, db: Session = Depends(database.get_db)):
+    """Analyze a stored game with Stockfish and save results."""
+    try:
+        result = analysis_service.analyze_game(db, game_id)
+        return result
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error during analysis of game {game_id}: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred during game analysis.")
+
+@app.get("/games/{game_id}/analysis", response_model=list[game_schema.MoveAnalysisResponse])
+async def get_game_analysis(game_id: int, db: Session = Depends(database.get_db)):
+    """Retrieve the move-by-move analysis results for a analyzed game."""
+    analysis = analysis_service.get_game_analysis(db, game_id)
+    if not analysis:
+        # Check if game exists but just isn't analyzed
+        game = analysis_service.get_game_by_id(db, game_id)
+        if not game:
+            raise HTTPException(status_code=404, detail=f"Game with ID {game_id} not found")
+        return []
+    return analysis
+
 # Legacy/Helper endpoint from previous step (optional to keep, but user asked to keep it or implied it)
 @app.get("/players/{username}/latest-games-raw")
 async def get_latest_games_raw(username: str):

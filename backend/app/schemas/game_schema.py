@@ -50,4 +50,6 @@ class ImportGamesResponse(BaseModel):
 class AnalyzeGameResponse(BaseModel):
     game_id: int
     moves_analyzed: int
-    summary: str
+    blunders: int
+    mistakes: int
+    inaccuracies: int
