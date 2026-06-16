@@ -1,20 +1,14 @@
-@'
 venv/
 .venv/
-
 __pycache__/
 *.pyc
-
 .env
 backend/.env
-frontend/.env
 backend/chess_coach.db
 *.db
-
 /engine/
 .vscode/
 *.log
-
 frontend/node_modules/
 frontend/dist/
-'@ | Set-Content .gitignore -Encoding UTF8
+frontend/.env
