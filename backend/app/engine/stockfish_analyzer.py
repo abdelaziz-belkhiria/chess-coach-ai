@@ -70,10 +70,10 @@ class ChessAnalyzer:
             fen_before = board.fen()
             move_san = board.san(move)
 
-            # 1. Evaluation BEFORE the move (side-to-move perspective)
+            # 1. Evaluation BEFORE the move, from the perspective of the side about to move (the mover)
             sf.set_fen_position(fen_before)
             eval_before_data = sf.get_evaluation()
-            eval_before = self._get_eval_value(sf)
+            eval_before_mover = self._get_eval_value(sf)
             best_move_uci = sf.get_best_move()
             
             # Convert best move to SAN for easier reading
@@ -87,21 +87,32 @@ class ChessAnalyzer:
             # 2. Execute move
             board.push(move)
 
-            # 3. Evaluation AFTER the move (from the perspective of the player who just moved)
+            # 3. Evaluation AFTER the move. Stockfish now evaluates from the perspective
+            # of whoever is next to move (the opponent), so we negate it to get the
+            # mover's own perspective (needed for an apples-to-apples points-lost calc).
             sf.set_fen_position(board.fen())
-            eval_now_to_move_data = sf.get_evaluation()
-            eval_now_to_move = self._get_eval_value(sf)
-            eval_after = -eval_now_to_move
+            eval_after_data = sf.get_evaluation()
+            eval_after_opponent = self._get_eval_value(sf)
+            eval_after_mover = -eval_after_opponent
 
-            # Points lost calculation and capping
-            points_lost = max(0.0, eval_before - eval_after)
+            # Points lost calculation and capping (always from the mover's own perspective,
+            # i.e. "how much did my own move worsen my position").
+            points_lost = max(0.0, eval_before_mover - eval_after_mover)
             if points_lost > MAX_POINTS_LOST:
                 points_lost = MAX_POINTS_LOST
             
             classification = self.classify_move(points_lost)
 
             # Check if it was a mate-related situation
-            is_mate_related = (eval_before_data["type"] == "mate" or eval_now_to_move_data["type"] == "mate")
+            is_mate_related = (eval_before_data["type"] == "mate" or eval_after_data["type"] == "mate")
+
+            # Convert evaluations to a SINGLE consistent reference frame (White's perspective,
+            # the standard convention used by chess.com/lichess eval bars) before storing/returning.
+            # Without this, evaluation_before/after would alternate perspective every ply
+            # (White's view on White's moves, Black's view on Black's moves), which makes the
+            # evaluation graph and any move-to-move eval comparison meaningless.
+            eval_before_white = eval_before_mover if mover_is_white else -eval_before_mover
+            eval_after_white = eval_after_mover if mover_is_white else -eval_after_mover
 
             results.append({
                 "move_number": move_number,
@@ -111,8 +122,8 @@ class ChessAnalyzer:
                 "best_move": best_move_san, # Set to SAN for backward compatibility if possible, or just add new fields
                 "best_move_uci": best_move_uci,
                 "best_move_san": best_move_san,
-                "evaluation_before": round(eval_before, 2),
-                "evaluation_after": round(eval_after, 2),
+                "evaluation_before": round(eval_before_white, 2),
+                "evaluation_after": round(eval_after_white, 2),
                 "points_lost": round(points_lost, 2),
                 "classification": classification,
                 "is_mate_related": is_mate_related

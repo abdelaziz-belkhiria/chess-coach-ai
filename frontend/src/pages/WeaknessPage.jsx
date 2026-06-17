@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Target, TrendingDown, ArrowRight, MousePointer2 } from 'lucide-react';
 import { api } from '../api/client';
 import { useLanguage } from '../components/LanguageProvider';
@@ -8,12 +8,9 @@ import MoveBadge from '../components/MoveBadge';
 const WeaknessPage = () => {
   const { username } = useParams();
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchWeaknesses();
-  }, [username]);
 
   const fetchWeaknesses = async () => {
     setLoading(true);
@@ -26,6 +23,10 @@ const WeaknessPage = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchWeaknesses();
+  }, [username]);
 
   if (loading) return <div style={{ textAlign: 'center', padding: '100px', color: 'var(--text-muted)' }}>{t('loading')}</div>;
   if (!data) return <div style={{ textAlign: 'center', padding: '100px', color: 'var(--text-muted)' }}>{t('error')}</div>;
@@ -46,9 +47,12 @@ const WeaknessPage = () => {
          <h2 style={{ fontSize: '2rem', marginBottom: '16px' }}>{t('weaknesses')}</h2>
          <p style={{ color: 'var(--text-muted)' }}>{data?.message || "No analyzed games yet. Analyze games first."}</p>
          <div style={{ marginTop: '32px' }}>
-            <Link to={-1} style={{ padding: '12px 24px', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '8px' }}>
+            <button
+              onClick={() => navigate(-1)}
+              style={{ padding: '12px 24px', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer' }}
+            >
               {t('backToGames')}
-            </Link>
+            </button>
          </div>
       </div>
     );
@@ -57,9 +61,12 @@ const WeaknessPage = () => {
   return (
     <div className="weakness-page fade-in">
       <header style={{ marginBottom: '32px' }}>
-        <Link to={-1} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '8px' }}>
+        <button
+          onClick={() => navigate(-1)}
+          style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
           <ChevronLeft size={16} /> {t('backToGames')}
-        </Link>
+        </button>
         <h2 style={{ fontSize: '2rem' }}>{t('weaknesses')} for {username}</h2>
       </header>
 

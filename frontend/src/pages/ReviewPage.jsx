@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Trophy, Target, AlertCircle, List as ListIcon, Rewind, FastForward, ChevronRight, ChevronLeft as ChevronLeftIcon } from 'lucide-react';
 import { api } from '../api/client';
 import { useLanguage } from '../components/LanguageProvider';
@@ -8,11 +8,13 @@ import EvaluationChart from '../components/EvaluationChart';
 import MoveBadge from '../components/MoveBadge';
 import KeyMoments from '../components/KeyMoments';
 import CoachPanel from '../components/CoachPanel';
+import MoveList from '../components/MoveList';
 
 
 const ReviewPage = () => {
   const { gameId } = useParams();
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -90,9 +92,12 @@ const ReviewPage = () => {
     <div className="review-page fade-in">
       <header style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <Link to={-1} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '8px' }}>
+          <button
+            onClick={() => navigate(-1)}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
             <ChevronLeft size={16} /> {t('backToGames')}
-          </Link>
+          </button>
           <h2 style={{ fontSize: '1.8rem' }}>
             {game.white_username} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '1.2rem' }}>vs</span> {game.black_username}
           </h2>
@@ -109,7 +114,7 @@ const ReviewPage = () => {
         {/* Left: Board and Navigation */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <ReviewBoard pgn={game.pgn} moves={moves} currentPly={currentPly} />
+            <ReviewBoard moves={moves} currentPly={currentPly} />
             
             {/* Navigation Controls */}
             <div style={{ display: 'flex', gap: '8px', marginTop: '24px' }}>
@@ -199,69 +204,5 @@ const AccuracyDisplay = ({ platform, accuracy, username }) => (
     </div>
   </div>
 );
-
-const MoveList = ({ moves, currentPly, onSelectPly }) => {
-  const pairs = [];
-  for (let i = 0; i < moves.length; i += 2) {
-    pairs.push([moves[i], moves[i + 1]]);
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {pairs.map((pair, idx) => (
-        <div key={idx} style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-          <div style={{ width: '40px', padding: '8px', color: 'var(--text-muted)', fontSize: '0.85rem', display: 'flex', alignItems: 'center' }}>
-            {idx + 1}.
-          </div>
-          <MoveItem move={pair[0]} ply={idx * 2 + 1} active={currentPly === idx * 2 + 1} onClick={() => onSelectPly(idx * 2 + 1)} />
-          {pair[1] && <MoveItem move={pair[1]} ply={idx * 2 + 2} active={currentPly === idx * 2 + 2} onClick={() => onSelectPly(idx * 2 + 2)} />}
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const MoveItem = ({ move, ply, active, onClick }) => {
-  const ref = React.useRef(null);
-  
-  useEffect(() => {
-    if (active && ref.current) {
-      ref.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [active]);
-
-  return (
-    <div 
-      ref={ref}
-      onClick={onClick}
-      style={{ 
-        flex: 1, 
-        padding: '8px 12px', 
-        cursor: 'pointer',
-        backgroundColor: active ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-        borderLeft: active ? '3px solid var(--primary)' : '3px solid transparent',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        transition: '0.1s'
-      }}
-    >
-      <span style={{ fontWeight: 600 }}>{move.move_san}</span>
-      {move.classification && move.classification !== 'Best' && <span style={{ fontSize: '0.7rem' }}>{getSymbol(move.classification)}</span>}
-    </div>
-  );
-};
-
-const getSymbol = (cls) => {
-    switch (cls) {
-        case 'Brilliant': return '!!';
-        case 'Great': return '!';
-        case 'Inaccuracy': return '?!';
-        case 'Mistake': return '?';
-        case 'Miss': return 'X';
-        case 'Blunder': return '??';
-        default: return '';
-    }
-};
 
 export default ReviewPage;

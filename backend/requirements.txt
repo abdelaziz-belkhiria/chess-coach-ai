@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 requests
-python-chess
+chess
 stockfish
 sqlalchemy
 pydantic
